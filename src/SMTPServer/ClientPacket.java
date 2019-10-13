@@ -1,6 +1,6 @@
 package SMTPServer;
 
-public class Packet {
+public class ClientPacket {
     public String Type;
     public String Login;
     public String Password;

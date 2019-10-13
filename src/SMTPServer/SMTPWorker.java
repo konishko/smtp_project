@@ -14,13 +14,13 @@ public class SMTPWorker extends Threaded {
     private DataInputStream in;
     private DataOutputStream out;
     private boolean quit;
-    private Serializator<Packet> serializator;
+    private Serializator<ClientPacket> serializator;
     private SMTP smtp;
     void setQuitTrue() {quit = true;}
 
     public SMTPWorker(Socket client) {
         smtp = new SMTP();
-        serializator = new Serializator<Packet>();
+        serializator = new Serializator<ClientPacket>();
         serializator.register(new IntSerializator());
         serializator.register(new StringSerializator());
         this.client = client;
@@ -35,12 +35,12 @@ public class SMTPWorker extends Threaded {
         }
     }
 
-    private Packet handleRequest(Packet packet){
-        if(packet.Type.equals("Login")) smtp.Login(packet.Login, packet.Password);
-        else if (packet.Type.equals("Letter")){
+    private ClientPacket handleRequest(ClientPacket clientPacket){
+        if(clientPacket.Type.equals("Login")) smtp.Login(clientPacket.Login, clientPacket.Password);
+        else if (clientPacket.Type.equals("Letter")){
             ArrayList<byte[]> attachments = null;
-            if(packet.AttachmentsCount  != 0) attachments = getAttachments(packet.AttachmentsCount);
-            smtp.send_email(packet.Sender, packet.Receivers.split(", "), packet.Theme, packet.Letter, attachments);
+            if(clientPacket.AttachmentsCount  != 0) attachments = getAttachments(clientPacket.AttachmentsCount);
+            smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
         }
         return null;
     }
@@ -68,9 +68,9 @@ public class SMTPWorker extends Threaded {
                     int len = in.readInt();
                     byte[] pack = new byte[len];
                     in.readFully(pack);
-                    Packet packet = null;
+                    ClientPacket clientPacket = null;
                     try {
-                        packet = (Packet)serializator.Deserialize(pack);
+                        clientPacket = (ClientPacket)serializator.Deserialize(pack);
                     } catch (DeserializeException e) {
                         e.printStackTrace();
                         quit = true;
