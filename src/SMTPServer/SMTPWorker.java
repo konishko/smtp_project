@@ -14,15 +14,19 @@ public class SMTPWorker extends Threaded {
     private DataInputStream in;
     private DataOutputStream out;
     private boolean quit;
-    private Serializator<ClientPacket> serializator;
+    private Serializator<ClientPacket> clientPacketSerializator;
+    private Serializator<ServerPacket> serverPacketSerializator;
     private SMTP smtp;
     void setQuitTrue() {quit = true;}
 
     public SMTPWorker(Socket client) {
         smtp = new SMTP();
-        serializator = new Serializator<ClientPacket>();
-        serializator.register(new IntSerializator());
-        serializator.register(new StringSerializator());
+        clientPacketSerializator = new Serializator<ClientPacket>();
+        clientPacketSerializator.register(new IntSerializator());
+        clientPacketSerializator.register(new StringSerializator());
+        serverPacketSerializator = new Serializator<ServerPacket>();
+        serverPacketSerializator.register(new IntSerializator());
+        serverPacketSerializator.register(new StringSerializator());
         this.client = client;
         quit = false;
         try {
@@ -35,14 +39,20 @@ public class SMTPWorker extends Threaded {
         }
     }
 
-    private ClientPacket handleRequest(ClientPacket clientPacket){
-        if(clientPacket.Type.equals("Login")) smtp.Login(clientPacket.Login, clientPacket.Password);
+    private ServerPacket handleRequest(ClientPacket clientPacket){
+        ServerPacket serverPacket = null;
+        String errorMsg = null;
+        boolean error = false;
+        if(clientPacket.Type.equals("Login")) {
+            error = !smtp.Login(clientPacket.Login, clientPacket.Password);
+            if(error) errorMsg = "Incorrect login or password";
+        }
         else if (clientPacket.Type.equals("Letter")){
             ArrayList<byte[]> attachments = null;
             if(clientPacket.AttachmentsCount  != 0) attachments = getAttachments(clientPacket.AttachmentsCount);
-            smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
+            error = !smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
         }
-        return null;
+        return new ServerPacket(error, errorMsg);
     }
 
     private ArrayList<byte[]> getAttachments(int attachmentsCount){
@@ -70,11 +80,13 @@ public class SMTPWorker extends Threaded {
                     in.readFully(pack);
                     ClientPacket clientPacket = null;
                     try {
-                        clientPacket = (ClientPacket)serializator.Deserialize(pack);
+                        clientPacket = (ClientPacket)clientPacketSerializator.Deserialize(pack);
                     } catch (DeserializeException e) {
                         e.printStackTrace();
                         quit = true;
                     }
+                    ServerPacket serverPacket = handleRequest(clientPacket);
+                    out.write(serverPacketSerializator.Serialize(serverPacket));
                 }
         }
         catch (IOException e) { e.printStackTrace();}
