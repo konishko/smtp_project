@@ -50,7 +50,11 @@ public class SMTPWorker extends Threaded {
         else if (clientPacket.Type.equals("Letter")){
             ArrayList<byte[]> attachments = null;
             if(clientPacket.AttachmentsCount  != 0) attachments = getAttachments(clientPacket.AttachmentsCount);
-            error = !smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
+            try {
+                error = !smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
         return new ServerPacket(error, errorMsg);
     }

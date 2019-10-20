@@ -12,9 +12,11 @@ public class SMTP {
     private Scanner sc;
     private BufferedOutputStream bos;
     private Base64.Encoder encoder;
+    private EmailMaker em;
 
     public SMTP(){
         encoder = Base64.getEncoder();
+        em = new EmailMaker(encoder);
         SSLSocketFactory sslsocketfactory = (SSLSocketFactory) SSLSocketFactory
                 .getDefault();
         try {
@@ -33,7 +35,7 @@ public class SMTP {
         }
         try {
             ReceiveData();
-            SendData("EHLO user".getBytes());
+            SendData("EHLO user");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -60,12 +62,17 @@ public class SMTP {
         bos.flush();
         return ReceiveData();
     }
+
+    private String SendData(String data) throws IOException {
+        System.out.println(data);
+        return SendData(data.getBytes());
+    }
     public boolean Login(String login, String password){
         String data = null;
         byte[] b64Login = encoder.encode(login.getBytes());
         byte[] b64Password = encoder.encode(password.getBytes());
         try {
-           SendData("AUTH LOGIN".getBytes());
+           SendData("AUTH LOGIN");
            SendData(b64Login);
            data = SendData(b64Password);
         } catch (IOException e) {
@@ -75,7 +82,28 @@ public class SMTP {
         return (data.split(" ")[0].equals("235"));
     }
 
-    public boolean send_email(String sender, String[] receivers, String theme, String text, ArrayList<byte[]> attachments){
+    private void IndicateSender(String sender) throws Exception {
+        String data = SendData(String.format("MAIL FROM:<%s>", sender));
+        if (!data.split(" ")[0].equals("250"))
+        throw new Exception("Incorrect name of sender or need a secure connection");
+    }
+
+    private void IndicateReceivers(String[] receivers) throws Exception {
+        for(String rec : receivers){
+            String data = SendData(String.format("RCPT TO:<%s>", rec));
+            if(!data.split(" ")[0].equals("250"))
+                throw new Exception("\"Incorrect name of receiver");
+        }
+    }
+
+
+
+    public boolean send_email(String sender, String[] receivers, String theme, String text, ArrayList<byte[]> attachments) throws Exception {
+        IndicateSender(sender);
+        IndicateReceivers(receivers);
+        String email = em.MakeEmail(text, sender, sender, receivers, theme);
+        SendData("DATA");
+        SendData(email + "\r\n.");
         return true;
     }
 }
