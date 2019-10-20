@@ -20,7 +20,11 @@ public class SMTPWorker extends Threaded {
     void setQuitTrue() {quit = true;}
 
     public SMTPWorker(Socket client) {
-        smtp = new SMTP();
+        try {
+            smtp = new SMTP();
+        } catch (SMTPException e) {
+            setQuitTrue();
+        }
         clientPacketSerializator = new Serializator<ClientPacket>();
         clientPacketSerializator.register(new IntSerializator());
         clientPacketSerializator.register(new StringSerializator());
@@ -41,33 +45,41 @@ public class SMTPWorker extends Threaded {
 
     private ServerPacket handleRequest(ClientPacket clientPacket){
         ServerPacket serverPacket = null;
-        String errorMsg = null;
-        boolean error = false;
         if(clientPacket.Type.equals("Login")) {
-            error = !smtp.Login(clientPacket.Login, clientPacket.Password);
-            if(error) errorMsg = "Incorrect login or password";
-        }
-        else if (clientPacket.Type.equals("Letter")){
-            ArrayList<byte[]> attachments = null;
-            if(clientPacket.AttachmentsCount  != 0) attachments = getAttachments(clientPacket.AttachmentsCount);
-            try {
-                error = !smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
-            } catch (Exception e) {
-                e.printStackTrace();
+            try{
+                smtp.Login(clientPacket.Login, clientPacket.Password);
+            }
+            catch (SMTPException e){
+                serverPacket = new ServerPacket(true, e.getMessage());
             }
         }
-        return new ServerPacket(error, errorMsg);
+        else if (clientPacket.Type.equals("Letter")){
+            Tuple<String, byte[]>[] attachments  = null;
+            if(clientPacket.AttachmentsCount  != 0) attachments = getAttachments(clientPacket.AttachmentsCount);
+            try {
+                smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
+            } catch (SMTPException e) {
+                serverPacket = new ServerPacket(true, e.getMessage());
+            }
+        }
+        if(serverPacket == null) serverPacket = new ServerPacket(false, null);
+        return serverPacket;
     }
 
-    private ArrayList<byte[]> getAttachments(int attachmentsCount){
-        ArrayList<byte[]> attachments = new ArrayList<>();
+    private Tuple<String, byte[]>[] getAttachments(int attachmentsCount){
+        Tuple<String, byte[]>[] attachments = new Tuple[attachmentsCount];
         for(int i = 0; i < attachmentsCount; i++){
+            String name = null;
+            int nameLen = 0;
             int len = 0;
+            Tuple<String, byte[]> file = null;
             try {
                 len = in.readInt();
                 byte[] att = new byte[len];
                 in.readFully(att);
-                attachments.add(att);
+                name = in.readUTF();
+                file = new Tuple<String, byte[]>(name, att);
+                attachments[i] = file;
             } catch (IOException e) {
                 e.printStackTrace();
             }
