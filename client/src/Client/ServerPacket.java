@@ -1,6 +1,6 @@
 package Client;
 
 public class ServerPacket {
-    public boolean Exception;
-    public String Message;
+    public boolean exception;
+    public String message;
 }

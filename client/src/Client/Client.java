@@ -1,11 +1,13 @@
 package Client;
 import Serializator.*;
+import zip.Archiver;
 
 import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
 
 public class Client {
+    private Archiver archiver;
     private Socket client;
     private DataInputStream in;
     private DataOutputStream dos;
@@ -30,14 +32,15 @@ public class Client {
         serverPacketSerializator.register(new IntSerializator());
         serverPacketSerializator.register(new StringSerializator());
         serverPacketSerializator.register(new BooleanSerializator());
+        this.archiver = new Archiver();
     }
-    public ServerPacket Login(String login, String password){
+    public ServerPacket login(String login, String password){
         this.sender = login;
         ClientPacket packet = new ClientPacket();
         ServerPacket response = null;
-        packet.Type = "Login";
-        packet.Login = login;
-        packet.Password = password;
+        packet.type = "Login";
+        packet.login = login;
+        packet.password = password;
         byte[] pack = clientPacketSerializator.Serialize(packet);
         try {
             System.out.println(pack.length);
@@ -49,41 +52,56 @@ public class Client {
             byte[] resp = new byte[len];
             in.readFully(resp);
             response = serverPacketSerializator.Deserialize(resp);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (DeserializeException e) {
+        } catch (IOException | DeserializeException e) {
             e.printStackTrace();
         }
-        System.out.println(response.Exception);
+        System.out.println(response.exception);
         return response;
     }
 
-    public ServerPacket SendEmail(String[] receivers, String theme, String text, String[] attachments){
+    public ServerPacket sendEmail(final String[] receivers, final String theme, final String text){
+        return sendEmail(receivers, theme, text, new String[0], false);
+    }
+
+    public ServerPacket sendEmail(final String[] receivers, final String theme, final String text,
+                                  final String[] attachments, final boolean archiveContent){
         ClientPacket packet = new ClientPacket();
         ServerPacket response = null;
-        packet.Type = "Letter";
-        packet.Sender = sender;
-        packet.Theme = theme;
-        packet.Letter = text;
-        packet.AttachmentsCount = attachments.length;
+        packet.type = "Letter";
+        packet.sender = sender;
+        packet.theme = theme;
+        packet.letter = text;
+        if(archiveContent){
+            packet.attachmentsCount = 1;
+        } else {
+            packet.attachmentsCount = attachments.length;
+        }
         StringBuilder sb = new StringBuilder();
         for(int i = 0; i < receivers.length; i++){
             sb.append(receivers[i]);
             if(i != receivers.length - 1) sb.append(", ");
         }
-        packet.Receivers = sb.toString();
+        packet.receivers = sb.toString();
         byte[] pack = clientPacketSerializator.Serialize(packet);
         try {
             dos.writeInt(pack.length);
             bos.write(pack);
             bos.flush();
-            for(int i = 0; i < attachments.length; i++){
-                File file = new File(attachments[i]);
-                byte[] fileBytes = Files.readAllBytes(file.toPath());
-                dos.writeInt(fileBytes.length);
-                bos.write(fileBytes);
+            if(archiveContent){
+                byte[] archive = archiver.archiveFiles(attachments);
+                dos.writeInt(archive.length);
+                bos.write(archive);
                 bos.flush();
-                dos.writeUTF(attachments[i]);
+                dos.writeUTF("archive.zip");
+            } else {
+                for (String att: attachments) {
+                    File file = new File(att);
+                    byte[] fileBytes = Files.readAllBytes(file.toPath());
+                    dos.writeInt(fileBytes.length);
+                    bos.write(fileBytes);
+                    bos.flush();
+                    dos.writeUTF(att);
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -93,17 +111,15 @@ public class Client {
             byte[] resp = new byte[len];
             in.readFully(resp);
             response = serverPacketSerializator.Deserialize(resp);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (DeserializeException e) {
+        } catch (IOException | DeserializeException e) {
             e.printStackTrace();
         }
         return response;
     }
 
-    public void Quit(){
+    public void quit(){
         ClientPacket packet = new ClientPacket();
-        packet.Type = "Quit";
+        packet.type = "Quit";
         byte[] pack = clientPacketSerializator.Serialize(packet);
         try {
             System.out.println(pack.length);
