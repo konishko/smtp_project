@@ -2,11 +2,13 @@ package SMTPServer;
 
 import SMTP.SMTP;
 import SMTP.SMTPException;
+import SMTPServer.exception.DefectiveSentException;
 import Serializator.*;
 import ThreadDispatcher.Threaded;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.Arrays;
 
 public class SMTPWorker extends Threaded {
 
@@ -46,35 +48,41 @@ public class SMTPWorker extends Threaded {
 
     private ServerPacket handleRequest(ClientPacket clientPacket){
         ServerPacket serverPacket = new ServerPacket();
-        serverPacket.Exception = false;
-        if(clientPacket.Type.equals("Login")) {
+        serverPacket.exception = false;
+        if(clientPacket.type.equals("Login")) {
             try{
-                smtp.Login(clientPacket.Login, clientPacket.Password);
+                smtp.Login(clientPacket.login, clientPacket.password);
             }
             catch (SMTPException e){
-                serverPacket.Exception = true;
-                serverPacket.Message = e.getMessage();
+                serverPacket.exception = true;
+                serverPacket.message = e.getMessage();
             }
         }
-        else if (clientPacket.Type.equals("Letter")){
+        else if (clientPacket.type.equals("Letter")){
             Tuple<String, byte[]>[] attachments  = null;
-            if(clientPacket.AttachmentsCount  != 0) attachments = getAttachments(clientPacket.AttachmentsCount);
             try {
-                smtp.send_email(clientPacket.Sender, clientPacket.Receivers.split(", "), clientPacket.Theme, clientPacket.Letter, attachments);
-            } catch (SMTPException e) {
-                serverPacket.Exception = true;
-                serverPacket.Message = e.getMessage();
+                if (clientPacket.attachmentsCount != 0) attachments = getAttachments(clientPacket.attachmentsCount);
+            } catch (DefectiveSentException e){
+                serverPacket.exception = true;
+                serverPacket.message = e.getMessage();
+            }
+            if(!serverPacket.exception) {
+                try {
+                    smtp.send_email(clientPacket.sender, clientPacket.receivers.split(", "), clientPacket.theme, clientPacket.letter, attachments);
+                } catch (SMTPException e) {
+                    serverPacket.exception = true;
+                    serverPacket.message = e.getMessage();
+                }
             }
         }
-        else if(clientPacket.Type.equals("Quit")) setQuitTrue();
+        else if(clientPacket.type.equals("Quit")) setQuitTrue();
         return serverPacket;
     }
 
-    private Tuple<String, byte[]>[] getAttachments(int attachmentsCount){
+    private Tuple<String, byte[]>[] getAttachments(int attachmentsCount) throws DefectiveSentException{
         Tuple<String, byte[]>[] attachments = new Tuple[attachmentsCount];
         for(int i = 0; i < attachmentsCount; i++){
             String name = null;
-            int nameLen = 0;
             int len = 0;
             Tuple<String, byte[]> file = null;
             try {
@@ -82,6 +90,9 @@ public class SMTPWorker extends Threaded {
                 byte[] att = new byte[len];
                 in.readFully(att);
                 name = in.readUTF();
+                if(Arrays.hashCode(att) != in.readInt()){
+                    throw new DefectiveSentException("Хэшсуммы отправленных и полученных вложений не совпадают");
+                }
                 file = new Tuple<String, byte[]>(name, att);
                 attachments[i] = file;
             } catch (IOException e) {
@@ -107,7 +118,7 @@ public class SMTPWorker extends Threaded {
                         quit = true;
                     }
                     ServerPacket serverPacket = handleRequest(clientPacket);
-                    System.out.println(serverPacket.Exception);
+                    System.out.println(serverPacket.exception);
                     if(!quit) {
                         byte[] response = serverPacketSerializator.Serialize(serverPacket);
                         out.writeInt(response.length);
