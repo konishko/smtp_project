@@ -1,12 +1,12 @@
 package Client;
 
 public class ClientPacket {
-    public String Type;
-    public String Login;
-    public String Password;
-    public String Receivers;
-    public String Sender;
-    public String Theme;
-    public String Letter;
-    public int AttachmentsCount;
+    public String type;
+    public String login;
+    public String password;
+    public String receivers;
+    public String sender;
+    public String theme;
+    public String letter;
+    public int attachmentsCount;
 }
