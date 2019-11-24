@@ -5,6 +5,7 @@ import zip.Archiver;
 import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.util.Arrays;
 
 public class Client {
     private Archiver archiver;
@@ -93,6 +94,7 @@ public class Client {
                 bos.write(archive);
                 bos.flush();
                 dos.writeUTF("archive.zip");
+                dos.writeInt(Arrays.hashCode(archive));
             } else {
                 for (String att: attachments) {
                     File file = new File(att);
@@ -101,6 +103,7 @@ public class Client {
                     bos.write(fileBytes);
                     bos.flush();
                     dos.writeUTF(att);
+                    dos.writeInt(Arrays.hashCode(fileBytes));
                 }
             }
         } catch (IOException e) {
